@@ -1,0 +1,753 @@
+<!-- filepath: copy-pasta-helper-ops-aar-red-v3.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Copy Pasta Helper — Operations & AAR</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#450404;
+      --card:#2b0000;
+      --text:#ffffff;
+      --muted:#655454;
+      --line:#000000;
+      --btn:#730707;
+      --btn-hover:#990000;
+      --field:#7a0000;
+      --suggest:#730000;
+      --danger:#990013;
+      --ghost:#2f2f2f;
+      --shadow: rgba(0,0,0,.45);
+      --chip:#fdfdfd;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    a{color:#fff;text-decoration:underline}
+    .container{max-width:1100px;margin:40px auto;padding:20px}
+    .header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:16px}
+    h1{font-size:20px;margin:0;font-weight:600;letter-spacing:.2px}
+    select, input, textarea, button{border:1px solid var(--line);background:var(--field);color:var(--text);border-radius:10px}
+    select, input{height:40px}
+    select, input, textarea{padding:10px 12px;font-size:14px}
+    textarea{min-height:120px;resize:vertical}
+    button{cursor:pointer;padding:10px 14px;font-weight:600}
+    .btn{background:var(--btn);border-color:var(--line)}
+    .btn:hover{background:var(--btn-hover)}
+    .btn-accent{background:var(--card);border-color:var(--line)}
+    .btn-accent:hover{background:var(--btn)}
+    .btn-danger{background:var(--danger);border-color:var(--line)}
+    .btn-ghost{background:var(--ghost);border:1px dashed var(--line)}
+    .pill{padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--field);color:var(--chip);font-size:12px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px var(--shadow)}
+    .card.pad{padding:16px}
+    .copy-btn{width:100%; text-align:left; padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--btn); font-weight:600;}
+    .copy-btn:hover{background:var(--btn-hover)}
+    .copy-btn small{display:block;color:var(--chip);margin-top:6px;font-weight:400}
+    .chip{font-size:11px;color:#330000;background:#ffd6d6;border:1px solid var(--line);border-radius:8px;padding:4px 6px;margin-left:8px}
+    .inline-editor{margin-top:8px;border:1px solid var(--line);border-radius:10px;padding:8px;background:var(--field)}
+    .inline-editor textarea{min-height:90px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .split{display:grid;grid-template-columns:1fr 360px;gap:16px}
+    @media(max-width:1100px){.split{grid-template-columns:1fr}}
+    .muted{color:var(--muted)}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    .timer{display:flex;gap:8px;align-items:center}
+    .timer-dot{width:8px;height:8px;border-radius:50%;background:#ff2b2b;border:1px solid var(--line)}
+    .timer-dot.running{box-shadow:0 0 10px #ff2b2b}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+
+    .section-title{display:flex;align-items:center;gap:8px;margin:24px 0 10px}
+    .section-title h2{margin:0;font-size:18px}
+    .row-cols{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    @media(max-width:700px){.row-cols{grid-template-columns:1fr}}
+
+    .suggest-wrap{position:relative;width:100%}
+    .suggest-box{position:absolute;z-index:20;left:0;right:0;top:100%;background:var(--suggest);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 20px var(--shadow);max-height:220px;overflow:auto;display:none}
+    .suggest-item{padding:8px 10px;cursor:pointer}
+    .suggest-item:hover{background:#5e0000}
+
+    #capList{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+    #capList .cap-row{display:flex;gap:8px;align-items:center;width:100%}
+    #capList .cap-row .suggest-wrap{flex:1}
+    .cap-del{min-width:36px;padding:0 10px;height:36px;line-height:36px}
+
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100}
+    .modal{background:var(--card);border:1px solid var(--line);border-radius:12px;max-width:680px;width:92%;padding:16px;box-shadow:0 20px 60px var(--shadow)}
+    .modal h3{margin:0 0 10px 0}
+    .modal .row{justify-content:space-between}
+    .list{display:flex;flex-direction:column;gap:8px;margin-top:8px;max-height:360px;overflow:auto}
+    .list .item{display:flex;gap:8px;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card);border:1px solid var(--line);color:var(--text);padding:10px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;box-shadow:0 8px 24px var(--shadow);z-index:50}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Copy Pasta Helper <span class="chip">Operations</span></h1>
+      <div class="toolbar">
+        <button id="toggleCustomizeBtn" class="btn">Customize</button>
+        <button id="exportBtn" class="btn">Export</button>
+        <input id="importInput" type="file" accept="application/json" hidden />
+        <button id="importBtn" class="btn">Import</button>
+        <span class="pill" id="countPill">0 items</span>
+        <div class="timer pill" title="Operation timer">
+          <div id="timerDot" class="timer-dot"></div>
+          <span id="timerText" class="mono">00:00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card pad">
+        <div id="buttons" class="grid"></div>
+      </div>
+
+      <div class="card pad">
+        <h3 style="margin:0 0 8px 0;font-size:16px">Quick Add Preset</h3>
+        <form id="presetForm">
+          <input type="hidden" id="presetId" />
+          <input id="formName" type="text" placeholder="Button name" required />
+          <textarea id="formText" placeholder="Text to copy" required></textarea>
+          <div class="row">
+            <button type="submit" class="btn-accent">Save</button>
+            <button type="button" id="resetFormBtn" class="btn-ghost">Clear</button>
+          </div>
+          <div class="muted" style="font-size:12px">Built-ins can be customized in Customize mode; reset to defaults anytime.</div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===== AAR SECTION ===== -->
+    <div class="section-title">
+      <h2>After Action Report (AAR)</h2>
+      <span class="pill">Live preview</span>
+    </div>
+    <div class="card pad">
+      <!-- SHIPS USED -->
+      <div class="section-title" style="align-items:center">
+        <h2 style="font-size:16px;margin-right:auto">Ships Used</h2>
+        <button id="manageShipsBtn" class="btn" type="button">Manage</button>
+      </div>
+      <div class="row-cols">
+        <div class="suggest-wrap"><input id="shipGunship" placeholder="Gunship" autocomplete="off" /><div class="suggest-box"></div></div>
+        <div class="suggest-wrap"><input id="shipMedical" placeholder="Medical" autocomplete="off" /><div class="suggest-box"></div></div>
+      </div>
+
+      <div class="section-title" style="margin-top:12px;align-items:center">
+        <h2 style="font-size:16px;margin-right:auto">CAP</h2>
+        <button id="addCapBtn" class="btn" type="button">+ Add CAP</button>
+      </div>
+      <div id="capList"></div>
+
+      <div class="row" style="margin-top:8px">
+        <input id="shipAdditional" style="flex:1" placeholder="Additional Ships (no history)" />
+        <input id="shipReason" style="flex:1" placeholder="Reason" />
+      </div>
+      <div class="muted" style="font-size:12px">Each CAP field has recents & search; AAR lists them comma-separated.</div>
+
+      <!-- LOCATION (hierarchical) -->
+      <div class="section-title" style="margin-top:16px;align-items:center">
+        <h2 style="font-size:16px;margin-right:auto">Location</h2>
+        <button id="manageLocBtn" class="btn" type="button">Manage</button>
+      </div>
+      <div class="row-cols" style="margin-bottom:8px">
+        <select id="locSystem">
+          <option value="Stanton">Stanton</option>
+          <option value="Pyro">Pyro</option>
+          <option value="Nyx">Nyx</option>
+        </select>
+        <div class="suggest-wrap"><input id="locPlanet" placeholder="Planetary Body (optional)" autocomplete="off" /><div class="suggest-box" id="sg_locPlanet"></div></div>
+        <div class="suggest-wrap"><input id="locType" placeholder="Location Type (optional)" autocomplete="off" /><div class="suggest-box" id="sg_locType"></div></div>
+        <div class="suggest-wrap"><input id="locPoi" placeholder="Specific POI (optional)" autocomplete="off" /><div class="suggest-box" id="sg_locPoi"></div></div>
+      </div>
+      <div class="muted" style="font-size:12px">Suggestions are scoped by System → Planet → Type → POI (skip any except System).</div>
+
+      <!-- TIMESTAMPS -->
+      <div class="section-title"><h2 style="font-size:16px">Timestamps</h2></div>
+      <div class="muted" style="font-size:12px">Discord UNIX Timestamp tags (e.g. <code class="mono">&lt;t:1765285260:t&gt;</code>). Ops buttons fill these automatically.</div>
+      <div class="row-cols" style="margin-top:8px">
+        <input id="tsAlert" class="mono" placeholder="Alert <t:...:t>" />
+        <input id="tsDepart" class="mono" placeholder="Depart <t:...:t>" />
+        <input id="tsClient" class="mono" placeholder="Client <t:...:t>" />
+        <input id="tsRTB" class="mono" placeholder="RTB <t:...:t>" />
+      </div>
+
+      <!-- ENCOUNTERS -->
+      <div class="section-title"><h2 style="font-size:16px">Encounters</h2></div>
+      <div class="row-cols">
+        <textarea id="encPVE" placeholder="PVE"></textarea>
+        <textarea id="encPVP" placeholder="PVP"></textarea>
+      </div>
+      <textarea id="encActions" placeholder="Actions Taken" style="margin-top:10px"></textarea>
+
+      <!-- ISSUES -->
+      <div class="section-title"><h2 style="font-size:16px">Issues</h2></div>
+      <div class="row-cols">
+        <textarea id="issProblems" placeholder="Problems"></textarea>
+        <textarea id="issFix" placeholder="Brief Fix"></textarea>
+      </div>
+
+      <!-- SUMMARY -->
+      <div class="section-title"><h2 style="font-size:16px">Summary</h2></div>
+      <textarea id="summary" placeholder="[Short alert description]"></textarea>
+
+      <!-- RESULT -->
+      <div class="section-title"><h2 style="font-size:16px">Result</h2></div>
+      <div class="row-cols">
+        <input id="resExtractedTo" placeholder="Client Extracted To" />
+        <input id="resChallenges" placeholder="Challenges" />
+      </div>
+      <input id="resFailureReason" placeholder="Failure/Abort Reason" style="margin-top:10px" />
+
+      <!-- NOTES -->
+      <div class="section-title"><h2 style="font-size:16px">Notes</h2></div>
+      <textarea id="notes" placeholder="[Any additional Notes]"></textarea>
+
+      <div class="row" style="margin-top:12px;justify-content:space-between">
+        <span class="pill">Live Preview</span>
+        <button id="copyAARBtn" class="btn-accent">Copy AAR</button>
+      </div>
+      <textarea id="livePreview" class="mono" style="width:100%;min-height:480px"></textarea>
+    </div>
+  </div>
+
+  <!-- ===== Manage Ships Modal ===== -->
+  <div id="shipsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal">
+      <div class="row">
+        <h3>Manage Ships</h3>
+        <button type="button" class="btn-ghost" onclick="closeShipsModal()">Close</button>
+      </div>
+      <div class="row">
+        <div class="row" style="gap:6px">
+          <button class="btn" type="button" data-ship-class="gunship">Gunship</button>
+          <button class="btn" type="button" data-ship-class="medical">Medical</button>
+          <button class="btn" type="button" data-ship-class="cap">CAP</button>
+        </div>
+        <button class="btn-danger" type="button" id="clearShipClassBtn">Clear All</button>
+      </div>
+      <div class="list" id="shipsManageList"></div>
+    </div>
+  </div>
+
+  <!-- ===== Manage Location Modal ===== -->
+  <div id="locModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal">
+      <div class="row">
+        <h3>Manage Locations</h3>
+        <button type="button" class="btn-ghost" onclick="closeLocModal()">Close</button>
+      </div>
+      <div class="row" style="gap:8px">
+        <select id="manageLocSystem">
+          <option value="Stanton">Stanton</option>
+          <option value="Pyro">Pyro</option>
+          <option value="Nyx">Nyx</option>
+        </select>
+        <div class="row" style="gap:6px">
+          <button class="btn" type="button" data-loc-field="planet">Planet</button>
+          <button class="btn" type="button" data-loc-field="type">Location Type</button>
+          <button class="btn" type="button" data-loc-field="poi">Specific POI</button>
+        </div>
+        <button class="btn-danger" type="button" id="clearLocFieldBtn">Clear All</button>
+      </div>
+      <div class="list" id="locManageList"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // ===== Limits =====
+    const SHIP_RECENT_LIMIT = 40;
+    const LOCATION_RECENT_LIMIT = 200;
+
+    // ===== Storage keys (single source of truth) =====
+    const STORAGE_KEY = "copyPasta.presets.v1";
+    const OVERRIDES_KEY = "copyPasta.overrides.v1";
+    const RECENT_KEYS = { gunship:"aar.recent.gunship", medical:"aar.recent.medical", cap:"aar.recent.cap" };
+    const LOC2_KEY = (sys, field)=>`aar.recents.loc2.${sys}.${field}`;
+
+    // ===== Built-ins (Operations only) =====
+    const BUILT_INS = [
+      { id:"op-team-unavailable", category:"Operations", name:"Team unavailable",
+        text:"Greetings, \n \n There are currently no teams available. We are working on creating another team, and will update you as soon as a team is available. Thank you for understanding.", builtIn:true },
+      { id:"op-welcome-request", category:"Operations", name:"Welcome&Request",
+        text:"Greetings, \n \n I am the Team Lead assigned to your alert. As soon as you're ready, I'll send you a friend request, followed by a party invite. Please make sure that you are in first person and spamming the **left bracket key** (usually to the right of the P key, or the ü key on the german keyboard). Please confirm that you are ready.", builtIn:true },
+      { id:"op-info-loading-in", category:"Operations", name:"Info: Loading in",
+        text:"We are now loading in, and will be boarding our ships shortly.", builtIn:true },
+      { id:"op-info-on-the-way", category:"Operations", name:"Info: On the way",
+        text:"We are now on the way to you. Please make sure that your weapons stay holstered while under our care. While we are making our way over to your location, do you wish for extraction?", builtIn:true },
+      { id:"op-arrived", category:"Operations", name:"Arrived",
+        text:"We have arrived at your location and are commencing support.", builtIn:true },
+      { id:"op-success", category:"Operations", name:"Success",
+        text:"As we conclude our service, we’d like to sincerely thank you for trusting us. We hope today’s response was prompt, professional, and met your expectations. Your health and satisfaction are our top priorities, and we hope to assist you again in the future if needed.\n\n If you have a moment, we’d greatly appreciate it if you could leave a rating and comment on the alert card to let us know how we did today!", builtIn:true },
+      { id:"op-fail-finish", category:"Operations", name:"Fail Finish",
+        text:"As we conclude our service, we’d like to sincerely thank you for trusting us. We’re sorry that we were unable to rescue you this time. Your health and satisfaction are our top priorities, and we hope that we will be able to assist you in the future if needed.\n\n Until then, we wish you safe travels in the ’Verse.", builtIn:true },
+    ];
+
+    // ===== Utils =====
+    const uid = ()=>"u_"+Math.random().toString(36).slice(2,9);
+    const loadJson = (k,f)=>{ try{const r=localStorage.getItem(k); return r?JSON.parse(r):f;}catch{return f;} };
+    const saveJson = (k,v)=> localStorage.setItem(k, JSON.stringify(v));
+    const escapeHtml = s => s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function roundToNearestMinuteEpoch(d){ const dt=new Date(d); if(dt.getUTCSeconds()>=30) dt.setUTCMinutes(dt.getUTCMinutes()+1); dt.setUTCSeconds(0); dt.setUTCMilliseconds(0); return Math.floor(dt.getTime()/1000); }
+    const discordTag = (epoch)=>`<t:${epoch}:t>`;
+    let toastTimer; function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),1500); }
+
+    // ===== Presets & overrides =====
+    function getOverrides(){ return loadJson(OVERRIDES_KEY, {}); }
+    function setOverride(id, patch){ const ov=getOverrides(); ov[id] = { ...(ov[id]||{}), ...patch }; saveJson(OVERRIDES_KEY, ov); }
+    function clearOverride(id){ const ov=getOverrides(); delete ov[id]; saveJson(OVERRIDES_KEY, ov); }
+    function loadPresets(){
+      const user = loadJson(STORAGE_KEY, []);
+      const ov = getOverrides();
+      const built = BUILT_INS.map(b=>{
+        const o = ov[b.id];
+        return o? {...b, name:o.name??b.name, text:o.text??b.text, customized:true} : b;
+      });
+      return [...built, ...user];
+    }
+    function saveUserPresets(arr){ saveJson(STORAGE_KEY, arr.filter(p=>!p.builtIn)); }
+
+    // ===== One-time migration: purge Logistics =====
+    (function purgeNonOps(){
+      const raw = loadJson(STORAGE_KEY, []);
+      const onlyOps = raw.filter(p=>p.category==="Operations" || !p.category);
+      if (onlyOps.length !== raw.length) saveJson(STORAGE_KEY, onlyOps);
+      const ov = getOverrides();
+      const ovClean = Object.fromEntries(Object.entries(ov).filter(([k])=>!k.startsWith("log-")));
+      if (Object.keys(ovClean).length !== Object.keys(ov).length) saveJson(OVERRIDES_KEY, ovClean);
+    })();
+
+    // ===== State =====
+    let state = { presets: loadPresets(), editing:false, openEditorFor:null };
+    let opTimer = { running:false, tStart:null, tick:null };
+
+    // ===== Ships & Location storage =====
+    let recents = {
+      gunship: loadJson(RECENT_KEYS.gunship, []),
+      medical: loadJson(RECENT_KEYS.medical, []),
+      cap: loadJson(RECENT_KEYS.cap, []),
+    };
+    function getLocList(system, field){ return loadJson(LOC2_KEY(system, field), []); }
+    function setLocList(system, field, list){ saveJson(LOC2_KEY(system, field), list); }
+
+    // ===== DOM =====
+    const toggleCustomizeBtn = document.getElementById("toggleCustomizeBtn");
+    const grid = document.getElementById("buttons");
+    const countPill = document.getElementById("countPill");
+    const exportBtn = document.getElementById("exportBtn");
+    const importBtn = document.getElementById("importBtn");
+    const importInput = document.getElementById("importInput");
+
+    const form = document.getElementById("presetForm");
+    const formId = document.getElementById("presetId");
+    const formName = document.getElementById("formName");
+    const formText = document.getElementById("formText");
+
+    const shipGunship = document.getElementById("shipGunship");
+    const shipMedical = document.getElementById("shipMedical");
+    const shipAdditional = document.getElementById("shipAdditional");
+    const shipReason = document.getElementById("shipReason");
+    const capList = document.getElementById("capList");
+    const addCapBtn = document.getElementById("addCapBtn");
+
+    const tsAlert = document.getElementById("tsAlert");
+    const tsDepart = document.getElementById("tsDepart");
+    const tsClient = document.getElementById("tsClient");
+    const tsRTB = document.getElementById("tsRTB");
+    const timerText = document.getElementById("timerText");
+    const timerDot = document.getElementById("timerDot");
+
+    const encPVE = document.getElementById("encPVE");
+    const encPVP = document.getElementById("encPVP");
+    const encActions = document.getElementById("encActions");
+    const summary = document.getElementById("summary");
+    const issProblems = document.getElementById("issProblems");
+    const issFix = document.getElementById("issFix");
+    const resExtractedTo = document.getElementById("resExtractedTo");
+    const resChallenges = document.getElementById("resChallenges");
+    const resFailureReason = document.getElementById("resFailureReason");
+    const notes = document.getElementById("notes");
+
+    const locSystem = document.getElementById("locSystem");
+    const locPlanet = document.getElementById("locPlanet");
+    const locType = document.getElementById("locType");
+    const locPoi = document.getElementById("locPoi");
+    const sg_locPlanet = document.getElementById("sg_locPlanet");
+    const sg_locType = document.getElementById("sg_locType");
+    const sg_locPoi = document.getElementById("sg_locPoi");
+
+    const manageShipsBtn = document.getElementById("manageShipsBtn");
+    const shipsModal = document.getElementById("shipsModal");
+    const shipsManageList = document.getElementById("shipsManageList");
+    const clearShipClassBtn = document.getElementById("clearShipClassBtn");
+
+    const manageLocBtn = document.getElementById("manageLocBtn");
+    const locModal = document.getElementById("locModal");
+    const manageLocSystem = document.getElementById("manageLocSystem");
+    const locManageList = document.getElementById("locManageList");
+    const clearLocFieldBtn = document.getElementById("clearLocFieldBtn");
+
+    // ===== Render Copy Buttons (with Delete for custom) =====
+    function renderButtons(){
+      state.presets = loadPresets().filter(p=>p.category==="Operations" || !p.category);
+      const items = state.presets;
+      countPill.textContent = `${items.length} item${items.length===1?"":"s"}`;
+      grid.innerHTML = "";
+      for(const p of items){
+        const card=document.createElement("div");
+        const btn=document.createElement("button");
+        btn.type="button"; btn.className="copy-btn";
+        const chip = `Operations${p.builtIn ? (p.customized ? ' · built-in · customized' : ' · built-in') : ''}`;
+        btn.innerHTML = `${escapeHtml(p.name)}<small>${chip}</small>`;
+
+        if(!state.editing){
+          btn.addEventListener("click", ()=>handlePresetClick(p));
+          card.appendChild(btn);
+        } else {
+          btn.addEventListener("click", ()=>{ state.openEditorFor = (state.openEditorFor===p.id? null : p.id); renderButtons(); });
+          card.appendChild(btn);
+          if(state.openEditorFor===p.id){
+            const ed = document.createElement("div"); ed.className="inline-editor";
+            const name = document.createElement("input"); name.value=p.name; name.placeholder="Button name";
+            const text = document.createElement("textarea"); text.value=p.text;
+            const row = document.createElement("div"); row.className="row";
+
+            if(p.builtIn && p.customized){
+              const reset = mkBtn("Reset","btn-ghost",()=>{ clearOverride(p.id); showToast("Reset"); renderButtons(); });
+              row.appendChild(reset);
+            }
+            if(!p.builtIn){
+              const del = mkBtn("Delete","btn-danger",()=>{
+                if(!confirm(`Delete "${p.name}"?`)) return;
+                const user = loadJson(STORAGE_KEY, []).filter(u=>u.id!==p.id);
+                saveJson(STORAGE_KEY, user);
+                state.openEditorFor=null;
+                showToast("Deleted");
+                renderButtons();
+              });
+              row.appendChild(del);
+            }
+
+            const save = mkBtn("Save","btn-accent",()=>{
+              if(p.builtIn){ setOverride(p.id, { name:name.value.trim(), text:text.value }); }
+              else{
+                const user = loadJson(STORAGE_KEY, []).map(u=> u.id===p.id ? {...u, name:name.value.trim(), text:text.value, category:"Operations"} : u);
+                saveJson(STORAGE_KEY, user);
+              }
+              showToast("Saved"); renderButtons();
+            });
+            const cancel = mkBtn("Cancel","btn-ghost",()=>{ state.openEditorFor=null; renderButtons(); });
+
+            row.appendChild(save); row.appendChild(cancel);
+            ed.appendChild(name); ed.appendChild(text); ed.appendChild(row);
+            card.appendChild(ed);
+          }
+        }
+        grid.appendChild(card);
+      }
+    }
+    function mkBtn(txt, cls, fn){ const b=document.createElement("button"); b.className=cls; b.type="button"; b.textContent=txt; b.addEventListener("click", fn); return b; }
+
+    // ===== Copy + UNIX timestamp link =====
+    async function handlePresetClick(p){
+      await copyToClipboard(p.text, p.name);
+      const tag = discordTag(roundToNearestMinuteEpoch(new Date()));
+      if(p.id==="op-welcome-request"){ startClock(); tsAlert.value = tag; }
+      else if(p.id==="op-info-on-the-way"){ tsDepart.value = tag; }
+      else if(p.id==="op-arrived"){ tsClient.value = tag; }
+      else if(p.id==="op-success" || p.id==="op-fail-finish"){ tsRTB.value = tag; stopClock(); }
+      updateLivePreview();
+    }
+    async function copyToClipboard(text, label){
+      try{ await navigator.clipboard.writeText(text); showToast(`Copied: ${label}`); }
+      catch{
+        const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand("copy"); showToast(`Copied: ${label}`); } finally{ document.body.removeChild(ta); }
+      }
+    }
+
+    // ===== Timer =====
+    function startClock(){ if(opTimer.running) return; opTimer.running=true; opTimer.tStart=new Date(); timerDot.classList.add("running"); opTimer.tick=setInterval(updateTimerUI,1000); updateTimerUI(); }
+    function stopClock(){ if(!opTimer.running) return; opTimer.running=false; clearInterval(opTimer.tick); timerDot.classList.remove("running"); updateTimerUI(); }
+    function updateTimerUI(){
+      if(!opTimer.running){ timerText.textContent="00:00"; return; }
+      const sec = Math.floor((Date.now()-opTimer.tStart.getTime())/1000);
+      const m = Math.floor(sec/60), s=sec%60; timerText.textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    }
+
+    // ===== Quick Add (Ops) =====
+    document.getElementById("presetForm").addEventListener("submit", (e)=>{
+      e.preventDefault();
+      const id = formId.value || uid();
+      const name = formName.value.trim();
+      const text = formText.value;
+      if(!name || !text) return;
+
+      const existing = loadPresets().find(p=>p.id===id);
+      if(existing && existing.builtIn){ setOverride(id, { name, text }); }
+      else if(existing){
+        const user = loadJson(STORAGE_KEY, []).map(p=> p.id===id ? {...p, name, text, category:"Operations"} : p);
+        saveJson(STORAGE_KEY, user);
+      }else{
+        const user = loadJson(STORAGE_KEY, []);
+        user.push({ id, category:"Operations", name, text, builtIn:false });
+        saveJson(STORAGE_KEY, user);
+      }
+      e.target.reset(); formId.value="";
+      renderButtons(); showToast("Preset saved");
+    });
+    document.getElementById("resetFormBtn").addEventListener("click", ()=>{ form.reset(); formId.value=""; });
+
+    // ===== Export / Import =====
+    exportBtn.addEventListener("click", ()=>{
+      const payload = JSON.stringify({ presets: loadJson(STORAGE_KEY, []).filter(p=>p.category==="Operations"||!p.category), overrides: getOverrides() }, null, 2);
+      const blob=new Blob([payload],{type:"application/json"});
+      const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="copy-pastas-export.json"; a.click(); URL.revokeObjectURL(a.href);
+      showToast("Exported");
+    });
+    importBtn.addEventListener("click", ()=> importInput.click());
+    importInput.addEventListener("change", async (e)=>{
+      const f=e.target.files?.[0]; if(!f) return;
+      try{
+        const txt=await f.text(); const data=JSON.parse(txt);
+        if(Array.isArray(data)){
+          const onlyOps = data.filter(p=>!p.builtIn).map(p=>({...p, category:"Operations"}));
+          saveJson(STORAGE_KEY, onlyOps);
+        } else {
+          const onlyOps = (data.presets||[]).filter(p=>!p.builtIn).map(p=>({...p, category:"Operations"}));
+          saveJson(STORAGE_KEY, onlyOps);
+          if (data.overrides) saveJson(OVERRIDES_KEY, data.overrides);
+        }
+        renderButtons(); showToast("Imported");
+      }catch{ alert("Import failed"); } finally{ importInput.value=""; }
+    });
+
+    // ===== Suggestions helpers =====
+    function showSuggestions(box, list, query){
+      const q = (query||"").trim().toLowerCase();
+      const all = q ? list.filter(x=>x.toLowerCase().includes(q)) : list.slice(0,3);
+      box.innerHTML = all.length ? all.map(v=>`<div class="suggest-item" data-val="${escapeHtml(v)}">${escapeHtml(v)}</div>`).join("") : `<div class="suggest-item" data-val="">No matches</div>`;
+      box.style.display = "block";
+    }
+    function pushDistinctCapped(arr, value, cap){
+      const v = (value||"").trim(); if(!v) return arr;
+      const out = [v, ...arr.filter(x=>x.toLowerCase()!==v.toLowerCase())];
+      return out.slice(0, cap);
+    }
+
+    // ===== Ships recents & UI =====
+    function getShipList(key){ return recents[key] || []; }
+    function setShipRecent(key, value){
+      recents[key] = pushDistinctCapped(getShipList(key), value, SHIP_RECENT_LIMIT);
+      saveJson(RECENT_KEYS[key], recents[key]);
+    }
+    function hookSuggestShip(inputEl, key){
+      const box = inputEl.parentElement.querySelector(".suggest-box");
+      inputEl.addEventListener("focus", ()=> showSuggestions(box, getShipList(key), ""));
+      inputEl.addEventListener("input", ()=> showSuggestions(box, getShipList(key), inputEl.value));
+      inputEl.addEventListener("blur", ()=> setTimeout(()=> box.style.display="none", 150));
+      box.addEventListener("mousedown", e=> e.preventDefault());
+      box.addEventListener("click", e=>{
+        const t=e.target.closest(".suggest-item"); if(!t) return; inputEl.value = t.dataset.val; box.style.display="none"; updateLivePreview();
+      });
+      inputEl.addEventListener("change", ()=> setShipRecent(key, inputEl.value));
+      inputEl.addEventListener("input", updateLivePreview);
+    }
+    hookSuggestShip(shipGunship, "gunship");
+    hookSuggestShip(shipMedical, "medical");
+
+    // ===== CAP dynamic fields with delete =====
+    function addCapField(value=""){
+      const row = document.createElement("div"); row.className="cap-row";
+      const wrap = document.createElement("div"); wrap.className="suggest-wrap";
+      const input = document.createElement("input"); input.placeholder="CAP ship"; input.autocomplete="off"; input.value=value;
+      const box = document.createElement("div"); box.className="suggest-box";
+      wrap.appendChild(input); wrap.appendChild(box);
+      const del = document.createElement("button"); del.type="button"; del.className="btn-danger cap-del"; del.textContent="×"; del.title="Remove CAP";
+      del.addEventListener("click", ()=>{ capList.removeChild(row); updateLivePreview(); });
+      row.appendChild(wrap); row.appendChild(del); capList.appendChild(row);
+
+      input.addEventListener("focus", ()=> showSuggestions(box, getShipList("cap"), ""));
+      input.addEventListener("input", ()=> showSuggestions(box, getShipList("cap"), input.value));
+      input.addEventListener("blur", ()=> setTimeout(()=> box.style.display="none", 150));
+      box.addEventListener("mousedown", e=> e.preventDefault());
+      box.addEventListener("click", e=>{
+        const t=e.target.closest(".suggest-item"); if(!t) return; input.value = t.dataset.val; box.style.display="none"; updateLivePreview();
+      });
+      input.addEventListener("change", ()=> setShipRecent("cap", input.value));
+      input.addEventListener("input", updateLivePreview);
+      return input;
+    }
+    addCapBtn.addEventListener("click", ()=> addCapField());
+    addCapField(); // initial field
+
+    // ===== Location hierarchical recents & UI =====
+    function getLocScoped(field){ return getLocList(locSystem.value, field); }
+    function setLocScoped(field, value){
+      const list = pushDistinctCapped(getLocScoped(field), value, LOCATION_RECENT_LIMIT);
+      setLocList(locSystem.value, field, list);
+    }
+    function hookSuggestLoc(inputEl, field, boxEl){
+      inputEl.addEventListener("focus", ()=> showSuggestions(boxEl, getLocScoped(field), ""));
+      inputEl.addEventListener("input", ()=> showSuggestions(boxEl, getLocScoped(field), inputEl.value));
+      inputEl.addEventListener("blur", ()=> setTimeout(()=> boxEl.style.display="none", 150));
+      boxEl.addEventListener("mousedown", e=> e.preventDefault());
+      boxEl.addEventListener("click", e=>{
+        const t=e.target.closest(".suggest-item"); if(!t) return; inputEl.value = t.dataset.val; boxEl.style.display="none"; updateLivePreview();
+      });
+      inputEl.addEventListener("change", ()=> setLocScoped(field, inputEl.value));
+      inputEl.addEventListener("input", updateLivePreview);
+    }
+    hookSuggestLoc(locPlanet, "planet", sg_locPlanet);
+    hookSuggestLoc(locType, "type", sg_locType);
+    hookSuggestLoc(locPoi, "poi", sg_locPoi);
+    locSystem.addEventListener("change", updateLivePreview);
+
+    // ===== Manage Ships modal =====
+    const shipsModalEl = document.getElementById("shipsModal");
+    let currentShipClass = "gunship";
+    manageShipsBtn.addEventListener("click", ()=>{ shipsModalEl.style.display="flex"; currentShipClass="gunship"; refreshShipsManageList(); });
+    function closeShipsModal(){ shipsModalEl.style.display="none"; }
+    window.closeShipsModal = closeShipsModal;
+
+    document.querySelectorAll('#shipsModal [data-ship-class]').forEach(btn=>{
+      btn.addEventListener("click", ()=>{ currentShipClass = btn.getAttribute("data-ship-class"); refreshShipsManageList(); });
+    });
+    clearShipClassBtn.addEventListener("click", ()=>{
+      if(!confirm(`Clear all ${currentShipClass} entries?`)) return;
+      recents[currentShipClass] = []; saveJson(RECENT_KEYS[currentShipClass], []); refreshShipsManageList(); showToast("Cleared");
+    });
+    function refreshShipsManageList(){
+      const list = recents[currentShipClass] || [];
+      shipsManageList.innerHTML = list.length? "" : `<div class="muted">No entries.</div>`;
+      list.forEach((v, idx)=>{
+        const row=document.createElement("div"); row.className="item";
+        const label=document.createElement("div"); label.className="label"; label.textContent=v;
+        const del=document.createElement("button"); del.className="btn-danger"; del.type="button"; del.textContent="Delete";
+        del.addEventListener("click", ()=>{
+          const next = list.filter((_,i)=>i!==idx);
+          recents[currentShipClass]=next; saveJson(RECENT_KEYS[currentShipClass], next); refreshShipsManageList();
+        });
+        row.appendChild(label); row.appendChild(del); shipsManageList.appendChild(row);
+      });
+    }
+
+    // ===== Manage Location modal =====
+    const locModalEl = document.getElementById("locModal");
+    let currentLocField = "planet";
+    manageLocBtn.addEventListener("click", ()=>{ locModalEl.style.display="flex"; document.getElementById("manageLocSystem").value = locSystem.value; currentLocField="planet"; refreshLocManageList(); });
+    function closeLocModal(){ locModalEl.style.display="none"; }
+    window.closeLocModal = closeLocModal;
+
+    document.querySelectorAll('#locModal [data-loc-field]').forEach(btn=>{
+      btn.addEventListener("click", ()=>{ currentLocField = btn.getAttribute("data-loc-field"); refreshLocManageList(); });
+    });
+    document.getElementById("manageLocSystem").addEventListener("change", refreshLocManageList);
+    document.getElementById("clearLocFieldBtn").addEventListener("click", ()=>{
+      const sys = document.getElementById("manageLocSystem").value;
+      if(!confirm(`Clear all ${currentLocField} entries for ${sys}?`)) return;
+      setLocList(sys, currentLocField, []); refreshLocManageList(); showToast("Cleared");
+    });
+    function refreshLocManageList(){
+      const sys = document.getElementById("manageLocSystem").value;
+      const list = getLocList(sys, currentLocField) || [];
+      const box = document.getElementById("locManageList");
+      box.innerHTML = list.length? "" : `<div class="muted">No entries for ${sys} → ${currentLocField}.</div>`;
+      list.forEach((v, idx)=>{
+        const row=document.createElement("div"); row.className="item";
+        const label=document.createElement("div"); label.className="label"; label.textContent=v;
+        const del=document.createElement("button"); del.className="btn-danger"; del.type="button"; del.textContent="Delete";
+        del.addEventListener("click", ()=>{
+          const after = list.filter((_,i)=>i!==idx);
+          setLocList(sys, currentLocField, after); refreshLocManageList();
+        });
+        row.appendChild(label); row.appendChild(del); box.appendChild(row);
+      });
+    }
+
+    // ===== Live Preview =====
+    const liveInputs = [
+      shipGunship, shipMedical, shipAdditional, shipReason,
+      tsAlert, tsDepart, tsClient, tsRTB,
+      encPVE, encPVP, encActions, summary,
+      issProblems, issFix, resExtractedTo, resChallenges, resFailureReason, notes,
+      locPlanet, locType, locPoi, locSystem
+    ];
+    liveInputs.forEach(el => el.addEventListener("input", updateLivePreview));
+
+    function capValues(){
+      const inputs = capList.querySelectorAll(".cap-row input");
+      return Array.from(inputs).map(i=>i.value.trim()).filter(Boolean);
+    }
+    function oneLine(s){ return (s||"").replace(/\r?\n/g," ").trim(); }
+    function buildAARText(){
+      const cap = capValues().join(", ");
+      const tsRow = `Alert:${tsAlert.value||""} | Depart:${tsDepart.value||""} | Client:${tsClient.value||""} | RTB:${tsRTB.value||""}`;
+      return (
+`SHIPS USED
+Gunship: ${shipGunship.value||""}
+Medical: ${shipMedical.value||""}
+CAP: ${cap}
+Additional Ships: ${shipAdditional.value||""}
+Reason: ${shipReason.value||""}
+
+LOCATION
+System: ${locSystem.value||""}
+Planetary Body: ${locPlanet.value||""}
+Location Type: ${locType.value||""}
+Specific POI: ${locPoi.value||""}
+
+TIMESTAMPS
+${tsRow}
+
+ENCOUNTERS
+PVE: ${oneLine(encPVE.value)}
+PVP: ${oneLine(encPVP.value)}
+Actions Taken: ${oneLine(encActions.value)}
+
+ISSUES
+Problems: ${oneLine(issProblems.value)}
+Brief Fix: ${oneLine(issFix.value)}
+
+SUMMARY
+${summary.value||"[Short alert description]"}
+
+RESULT
+Client Extracted To: ${resExtractedTo.value||""}
+Challenges: ${resChallenges.value||""}
+Failure/Abort Reason: ${resFailureReason.value||""}
+
+NOTES:
+${notes.value||"[Any additional Notes]"}`
+      );
+    }
+    function updateLivePreview(){ document.getElementById("livePreview").value = buildAARText(); }
+    document.getElementById("copyAARBtn").addEventListener("click", ()=> copyToClipboard(document.getElementById("livePreview").value||"", "AAR"));
+
+    // ===== Customize toggle =====
+    toggleCustomizeBtn.addEventListener("click", ()=>{
+      state.editing = !state.editing; state.openEditorFor = null;
+      toggleCustomizeBtn.textContent = state.editing ? "Done" : "Customize";
+      renderButtons();
+    });
+
+    // ===== Init with guard =====
+    (function init(){
+      try{
+        renderButtons();
+        updateLivePreview();
+      }catch(err){
+        console.error(err);
+        alert("Init error: " + err.message);
+      }
+    })();
+  </script>
+</body>
+</html>
