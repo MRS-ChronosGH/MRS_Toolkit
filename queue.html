@@ -1,0 +1,399 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Queue Tracker</title>
+    <style>
+      body { font-family: system-ui, Arial; margin: 24px; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+      input, button { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid #ccc; }
+      button { cursor: pointer; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 16px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; }
+      .muted { color: #666; }
+      ol { margin: 0; padding-left: 20px; }
+      code { background: #f6f6f6; padding: 2px 6px; border-radius: 6px; }
+      .log { max-height: 260px; overflow: auto; background:#fafafa; border:1px solid #eee; border-radius: 12px; padding: 12px; }
+      .pill { display:inline-block; padding: 2px 8px; border:1px solid #ddd; border-radius: 999px; font-size: 12px; }
+    </style>
+  </head>
+
+  <body>
+    <h1>Queue Tracker</h1>
+    <p class="muted">
+      Uses Medrunner API Token (refresh token). It is stored only in your browser (localStorage), not in GitHub.
+    </p>
+
+    <div class="row">
+      <input id="token" type="password" placeholder="Paste your Medrunner API Token here" size="42" />
+      <button id="saveToken">Save token</button>
+
+      <span class="pill" id="connState">Disconnected</span>
+
+      <button id="connect">Connect</button>
+      <button id="disconnect">Disconnect</button>
+      <button id="clearAll">Clear local data</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Queue</h2>
+        <p class="muted">Teams currently in queue (not deployed).</p>
+        <ol id="queueList"></ol>
+
+        <hr />
+        <h3>Manual add (optional)</h3>
+        <p class="muted">
+          If your org’s API does not push existing teams on connect, you can seed the queue here once.
+          New teams created after you connect will still auto-append when <code>TeamCreate</code> fires.
+        </p>
+        <div class="row">
+          <input id="manualTeamId" placeholder="team id (optional)" />
+          <input id="manualTeamName" placeholder="team name (required)" />
+          <button id="manualAdd">Add to end</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Active (Deployed)</h2>
+        <p class="muted">Teams removed from queue because they took an alert.</p>
+        <div id="activeList"></div>
+      </div>
+
+      <div class="card">
+        <h2>Event log</h2>
+        <p class="muted">What the tracker is seeing from Medrunner.</p>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      // Medrunner docs:
+      // - Auth via refreshToken (API token) and client buildClient :contentReference[oaicite:6]{index=6}
+      // - WebSocket initialize/start via api.websocket.initialize() :contentReference[oaicite:7]{index=7}
+      // - Events list includes TeamCreate/Update/Delete, EmergencyCreate/Update :contentReference[oaicite:8]{index=8}
+      // - Emergency has status + acceptedTimestamp + respondingTeams[] :contentReference[oaicite:9]{index=9}
+
+      import { MedrunnerApiClient } from "https://esm.sh/@medrunner/api-client@0.6.3";
+
+      // --- UI helpers ---
+      const $ = (id) => document.getElementById(id);
+      const logEl = $("log");
+      function log(msg) {
+        const line = document.createElement("div");
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        logEl.prepend(line);
+      }
+      function setConnState(text) { $("connState").textContent = text; }
+
+      // --- storage keys ---
+      const KEY_TOKEN = "mrs_token";
+      const KEY_QUEUE = "mrs_queue";
+      const KEY_PAUSED = "mrs_paused"; // teamId -> { priorIndex:number, acceptedAt:number, emergencyId:string, teamName?:string }
+      const KEY_TEAMS  = "mrs_teams";  // teamId -> { id, name }
+
+      // --- state ---
+      let api = null;
+      let ws = null;
+
+      let queue = JSON.parse(localStorage.getItem(KEY_QUEUE) || "[]");
+      let paused = JSON.parse(localStorage.getItem(KEY_PAUSED) || "{}");
+      let teams = JSON.parse(localStorage.getItem(KEY_TEAMS) || "{}");
+
+      // MissionStatus numeric values from Medrunner enum :contentReference[oaicite:10]{index=10}
+      const MissionStatus = {
+        CREATED: 0,
+        RECEIVED: 1,
+        IN_PROGRESS: 2,
+        SUCCESS: 3,
+        FAILED: 4,
+        NO_CONTACT: 5,
+        CANCELED: 6,
+        REFUSED: 7,
+        ABORTED: 8,
+        SERVER_ERROR: 9,
+      };
+
+      function persist() {
+        localStorage.setItem(KEY_QUEUE, JSON.stringify(queue));
+        localStorage.setItem(KEY_PAUSED, JSON.stringify(paused));
+        localStorage.setItem(KEY_TEAMS, JSON.stringify(teams));
+      }
+
+      function teamLabel(teamId) {
+        const t = teams[teamId];
+        if (!teamId && t?.name) return t.name;
+        if (t?.name) return `${t.name} (${teamId})`;
+        return teamId || "(unknown team)";
+      }
+
+      function render() {
+        // queue list
+        const q = $("queueList");
+        q.innerHTML = "";
+        for (const teamId of queue) {
+          const li = document.createElement("li");
+          li.textContent = teamLabel(teamId);
+          q.appendChild(li);
+        }
+
+        // active list
+        const a = $("activeList");
+        a.innerHTML = "";
+        const entries = Object.entries(paused)
+          .sort(([,x],[,y]) => (x.acceptedAt || 0) - (y.acceptedAt || 0));
+
+        if (entries.length === 0) {
+          a.innerHTML = `<div class="muted">No active deployments detected.</div>`;
+        } else {
+          for (const [teamId, info] of entries) {
+            const div = document.createElement("div");
+            const accepted = info.acceptedAt ? new Date(info.acceptedAt).toLocaleString() : "unknown";
+            div.innerHTML = `
+              <div><strong>${teamLabel(teamId)}</strong></div>
+              <div class="muted">Emergency: ${info.emergencyId || "unknown"}</div>
+              <div class="muted">Accepted: ${accepted}</div>
+              <div class="muted">Saved queue index: ${info.priorIndex}</div>
+              <hr/>
+            `;
+            a.appendChild(div);
+          }
+        }
+      }
+
+      // --- Queue logic (matches your rules) ---
+      function ensureQueued(teamId) {
+        if (!teamId) return;
+        if (paused[teamId]) return;          // deployed
+        if (queue.includes(teamId)) return;  // already queued
+        queue.push(teamId);                  // new team -> last in queue
+        persist();
+        render();
+      }
+
+      function handleTakenAlert({ teamId, teamName, emergencyId, acceptedAt }) {
+        if (!teamId) return;
+
+        // save team info
+        if (teamName) teams[teamId] = { id: teamId, name: teamName };
+
+        // if team is currently in queue, remove it and remember its exact position
+        const priorIndex = queue.indexOf(teamId);
+        if (priorIndex >= 0) queue.splice(priorIndex, 1);
+
+        paused[teamId] = {
+          priorIndex: priorIndex >= 0 ? priorIndex : 0,
+          acceptedAt: acceptedAt || Date.now(),
+          emergencyId: emergencyId || "",
+          teamName: teamName || teams[teamId]?.name || "",
+        };
+
+        persist();
+        render();
+      }
+
+      function handleAbortOrCancel({ teamId }) {
+        if (!teamId) return;
+        const info = paused[teamId];
+        if (!info) return;
+
+        // reinsert team at the same queue position it had before taking the alert
+        const idx = Math.min(Math.max(info.priorIndex ?? 0, 0), queue.length);
+        queue.splice(idx, 0, teamId);
+
+        delete paused[teamId];
+        persist();
+        render();
+      }
+
+      function handleCompletionDefault({ teamId }) {
+        // You didn’t specify the “success/fail end state” rule yet.
+        // Common pattern: completed -> goes to end of queue.
+        if (!teamId) return;
+        if (paused[teamId]) {
+          delete paused[teamId];
+        }
+        // add to end if not already in queue
+        if (!queue.includes(teamId)) queue.push(teamId);
+        persist();
+        render();
+      }
+
+      // EmergencyUpdate is our main signal because it contains status + acceptedTimestamp :contentReference[oaicite:11]{index=11}
+      function handleEmergency(emergency) {
+        try {
+          const status = emergency?.status;
+          const emergencyId = emergency?.id;
+
+          // respondingTeams contains id + teamName :contentReference[oaicite:12]{index=12}
+          const rt = Array.isArray(emergency?.respondingTeams) ? emergency.respondingTeams[0] : null;
+          const teamId = rt?.id || null;
+          const teamName = rt?.teamName || emergency?.missionName || null;
+
+          if (!teamId) {
+            log(`Emergency ${emergencyId}: no responding team id found yet.`);
+            return;
+          }
+
+          // "Starting time decides queue position" => use acceptedTimestamp :contentReference[oaicite:13]{index=13}
+          const acceptedAt = emergency?.acceptedTimestamp ? Number(emergency.acceptedTimestamp) : null;
+
+          if (status === MissionStatus.IN_PROGRESS) {
+            log(`Emergency ${emergencyId}: IN_PROGRESS -> ${teamName || teamId} removed from queue`);
+            handleTakenAlert({ teamId, teamName, emergencyId, acceptedAt });
+            return;
+          }
+
+          if (status === MissionStatus.CANCELED || status === MissionStatus.ABORTED) {
+            log(`Emergency ${emergencyId}: CANCELED/ABORTED -> ${teamName || teamId} restored to previous queue position`);
+            handleAbortOrCancel({ teamId });
+            return;
+          }
+
+          // Default handling for other completion-like statuses
+          if (
+            status === MissionStatus.SUCCESS ||
+            status === MissionStatus.FAILED ||
+            status === MissionStatus.NO_CONTACT ||
+            status === MissionStatus.REFUSED ||
+            status === MissionStatus.SERVER_ERROR
+          ) {
+            log(`Emergency ${emergencyId}: status ${status} -> ${teamName || teamId} returned to end (default rule)`);
+            handleCompletionDefault({ teamId });
+          }
+        } catch (e) {
+          console.error(e);
+          log(`Error handling emergency: ${String(e)}`);
+        }
+      }
+
+      // --- connect/disconnect ---
+      async function connect() {
+        const refreshToken = localStorage.getItem(KEY_TOKEN);
+        if (!refreshToken) {
+          alert("Paste your API Token first, then click Save token.");
+          return;
+        }
+
+        // Build client (docs show refreshToken usage) :contentReference[oaicite:14]{index=14}
+        api = MedrunnerApiClient.buildClient({
+          baseUrl: "https://api.medrunner.space",
+          refreshToken,
+        });
+
+        setConnState("Connecting…");
+        log("Initializing WebSocket…");
+
+        // Realtime guide: api.websocket.initialize(); ws.start(); :contentReference[oaicite:15]{index=15}
+        ws = await api.websocket.initialize();
+        await ws.start();
+
+        setConnState("Connected");
+        log("WebSocket connected.");
+
+        // Events list :contentReference[oaicite:16]{index=16}
+        ws.on("TeamCreate", (team) => {
+          const teamId = team?.id || team?._id || team?.teamId;
+          const name = team?.name || team?.teamName || team?.callSign;
+          if (teamId) teams[teamId] = { id: teamId, name: name || teamId };
+          log(`TeamCreate: ${name || teamId || "(unknown)"}`);
+          // your rule: new team goes last
+          ensureQueued(teamId);
+        });
+
+        ws.on("TeamUpdate", (team) => {
+          const teamId = team?.id || team?._id || team?.teamId;
+          const name = team?.name || team?.teamName || team?.callSign;
+          if (teamId) teams[teamId] = { id: teamId, name: name || teamId };
+          persist(); render();
+        });
+
+        ws.on("TeamDelete", (team) => {
+          const teamId = team?.id || team?._id || team?.teamId;
+          log(`TeamDelete: ${teamId || "(unknown)"}`);
+          if (teamId) {
+            queue = queue.filter((x) => x !== teamId);
+            delete paused[teamId];
+            delete teams[teamId];
+            persist(); render();
+          }
+        });
+
+        ws.on("EmergencyCreate", (emergency) => {
+          log(`EmergencyCreate: ${emergency?.id || "(unknown id)"}`);
+          handleEmergency(emergency);
+        });
+
+        ws.on("EmergencyUpdate", (emergency) => {
+          log(`EmergencyUpdate: ${emergency?.id || "(unknown id)"}`);
+          handleEmergency(emergency);
+        });
+
+        ws.onclose(() => {
+          setConnState("Disconnected");
+          log("WebSocket closed.");
+        });
+
+        ws.onreconnected(() => {
+          setConnState("Connected");
+          log("WebSocket reconnected.");
+        });
+
+        persist();
+        render();
+      }
+
+      async function disconnect() {
+        try {
+          if (ws) await ws.stop();
+        } catch {}
+        ws = null;
+        api = null;
+        setConnState("Disconnected");
+        log("Disconnected.");
+      }
+
+      // --- wire up buttons ---
+      $("saveToken").onclick = () => {
+        const t = $("token").value.trim();
+        if (!t) return;
+        localStorage.setItem(KEY_TOKEN, t);
+        $("token").value = "";
+        log("Token saved to this browser.");
+      };
+
+      $("connect").onclick = connect;
+      $("disconnect").onclick = disconnect;
+
+      $("clearAll").onclick = () => {
+        if (!confirm("Clear token + queue data from this browser?")) return;
+        localStorage.removeItem(KEY_TOKEN);
+        localStorage.removeItem(KEY_QUEUE);
+        localStorage.removeItem(KEY_PAUSED);
+        localStorage.removeItem(KEY_TEAMS);
+        queue = [];
+        paused = {};
+        teams = {};
+        render();
+        log("Local data cleared.");
+      };
+
+      $("manualAdd").onclick = () => {
+        const teamId = $("manualTeamId").value.trim() || `manual:${crypto.randomUUID()}`;
+        const name = $("manualTeamName").value.trim();
+        if (!name) { alert("Team name is required."); return; }
+        teams[teamId] = { id: teamId, name };
+        queue.push(teamId);
+        persist(); render();
+        $("manualTeamId").value = "";
+        $("manualTeamName").value = "";
+        log(`Manually added team: ${name} (${teamId})`);
+      };
+
+      // preload token presence + render any saved queue
+      render();
+      if (localStorage.getItem(KEY_TOKEN)) log("Token found in browser storage. Click Connect.");
+    </script>
+  </body>
+</html>
